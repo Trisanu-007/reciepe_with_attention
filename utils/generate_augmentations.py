@@ -33,7 +33,7 @@ def generate_augmentations(BASE_PATH, image_path_to_caption):
         img = load_img(img_path)
         x = img_to_array(img)
         x = x.reshape((1,) + x.shape)
-        name_split = img_path.split("\\")[-1].split(".")[0]
+        name_split = img_path.split(os.sep)[-1].split(".")[0]
         i = 0
         img2caption[img_path].append(caption[0])
 

@@ -78,7 +78,7 @@ if __name__ == "__main__":
     # Adding augmentations
     if args["aug_img_path"] != "NA":
         img2caption, augmentation_dict = generate_augmentations(
-            BASE_PATH=args.aug_img_path, image_path_to_caption=image_path_to_caption
+            BASE_PATH=args["aug_img_path"], image_path_to_caption=image_path_to_caption
         )
         with open(PCK_SAVE_PATH + os.sep + "img2caption.pkl", "wb") as f:
             pkl.dump(img2caption, f)
