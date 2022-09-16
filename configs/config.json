@@ -1,0 +1,17 @@
+{
+    "img_path": "F:\\Datasets\\recipe-imgs-20k",
+    "csv_path": "F:\\Deep Learning\\Food Volume Experiments\\complete.csv",
+    "json_path": "F:\\Deep Learning\\Food Volume Experiments\\recipes_20k.json",
+    "pickle_save_path": "F:\\Deep Learning\\Food Volume Experiments\\pickle_save_files",
+    "aug_img_path": "NA",
+    "load_augs_from_path": false,
+    "generate_features": false,
+    "checkpoint_path": "F:/Deep Learning/Food Volume Experiments/checkpoints/train",
+    "EPOCHS": 2,
+    "BATCH_SIZE": 128,
+    "BUFFER_SIZE": 1000,
+    "embed_dim": 256,
+    "units": 512,
+    "features_shape": 2048,
+    "atts_features_shape": 64
+}
