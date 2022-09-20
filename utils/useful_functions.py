@@ -25,19 +25,27 @@ def map_func(img_name, cap):
     return img_tensor, cap
 
 
-def loss_function(real, pred, loss_object):
+def loss_function(real, pred, loss_object, GLOBAL_BATCH_SIZE):
     mask = tf.math.logical_not(tf.math.equal(real, 0))
     loss_ = loss_object(real, pred)
 
     mask = tf.cast(mask, dtype=loss_.dtype)
     loss_ *= mask
 
-    return tf.reduce_mean(loss_)
+    # return tf.reduce_mean(loss_)
+    return tf.nn.compute_average_loss(loss_, global_batch_size=GLOBAL_BATCH_SIZE)
 
 
 @tf.function
 def train_step(
-    img_tensor, target, encoder, decoder, word_to_index, optimizer, loss_object
+    img_tensor,
+    target,
+    encoder,
+    decoder,
+    word_to_index,
+    optimizer,
+    loss_object,
+    GLOBAL_BATCH_SIZE,
 ):
     loss = 0
 
@@ -53,7 +61,12 @@ def train_step(
         for i in range(1, target.shape[1]):
             # passing the features through the decoder
             predictions, hidden, _ = decoder(dec_input, features, hidden)
-            loss += loss_function(target[:, i], predictions, loss_object=loss_object)
+            loss += loss_function(
+                target[:, i],
+                predictions,
+                loss_object=loss_object,
+                GLOBAL_BATCH_SIZE=GLOBAL_BATCH_SIZE,
+            )
 
             # using teacher forcing
             dec_input = tf.expand_dims(target[:, i], 1)

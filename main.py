@@ -4,15 +4,16 @@ import os
 import pickle as pkl
 import random
 import time
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-import wandb
 from nltk.translate.bleu_score import sentence_bleu
 from tqdm import tqdm
 
+import wandb
 from model import CNN_Encoder, RNN_Decoder
 from utils.check_paths import check_paths_exists
 from utils.generate_augmentations import generate_augmentations
@@ -27,14 +28,80 @@ from utils.useful_functions import (
     train_step,
 )
 
+warnings.filterwarnings(action="once")
 os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
 random.seed(hash("setting random seeds") % 2**32 - 1)
 np.random.seed(hash("improves reproducibility") % 2**32 - 1)
 tf.random.set_seed(hash("by removing stochasticity") % 2**32 - 1)
 
+tf.config.run_functions_eagerly(True)
+
+
+@tf.function
+def distributed_train_step(
+    strategy,
+    img_tensor,
+    target,
+    encoder,
+    decoder,
+    word_to_index,
+    optimizer,
+    loss_object,
+    BATCH_SIZE,
+):
+    per_replica_losses, t_loss = strategy.run(
+        train_step,
+        args=(
+            img_tensor,
+            target,
+            encoder,
+            decoder,
+            word_to_index,
+            optimizer,
+            loss_object,
+            BATCH_SIZE,
+        ),
+    )
+
+    return (
+        strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None),
+        t_loss,
+    )
+
+
+@tf.function
+def distributed_test_step(
+    strategy,
+    image,
+    max_length,
+    attention_features_shape,
+    decoder,
+    encoder,
+    image_features_extract_model,
+    word_to_index,
+    index_to_word,
+):
+    result, attention_plot = strategy.run(
+        evaluate,
+        args=(
+            image,
+            max_length,
+            attention_features_shape,
+            decoder,
+            encoder,
+            image_features_extract_model,
+            word_to_index,
+            index_to_word,
+        ),
+    )
+
+    return result, attention_plot
+
+
 if __name__ == "__main__":
 
-    args = json.load(open("configs/config.json"))
+    with open("configs/config.json", "r") as f:
+        args = json.load(f)
 
     IMG_PATH = args["img_path"]
     CSV_PATH = args["csv_path"]
@@ -183,7 +250,12 @@ if __name__ == "__main__":
         img_name_val.extend([imgv] * capv_len)
         cap_val.extend(img_to_cap_vector[imgv])
 
-    BATCH_SIZE = args["BATCH_SIZE"]
+    strategy = tf.distribute.MirroredStrategy()
+
+    BATCH_SIZE_PER_GPU = args["BATCH_SIZE_PER_GPU"]
+    print("Number of devices: {}".format(strategy.num_replicas_in_sync))
+
+    BATCH_SIZE = BATCH_SIZE_PER_GPU * strategy.num_replicas_in_sync
     BUFFER_SIZE = args["BUFFER_SIZE"]
     embedding_dim = args["embed_dim"]
     units = args["units"]
@@ -206,24 +278,34 @@ if __name__ == "__main__":
     # Shuffle and batch
     dataset = dataset.shuffle(BUFFER_SIZE).batch(BATCH_SIZE)
     dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
+    distributed_dataset = strategy.experimental_distribute_dataset(dataset)
 
-    encoder = CNN_Encoder(embedding_dim)
-    decoder = RNN_Decoder(embedding_dim, units, tokenizer.vocabulary_size())
+    with strategy.scope():
+        encoder = CNN_Encoder(embedding_dim)
+        decoder = RNN_Decoder(embedding_dim, units, tokenizer.vocabulary_size())
 
-    optimizer = tf.keras.optimizers.Adam()
-    loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
-        from_logits=True, reduction="none"
-    )
+        optimizer = tf.keras.optimizers.Adam()
+
+    with strategy.scope():
+        loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
 
     checkpoint_path = args["checkpoint_path"]
-    ckpt = tf.train.Checkpoint(encoder=encoder, decoder=decoder, optimizer=optimizer)
-    ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+
+    with strategy.scope():
+        ckpt = tf.train.Checkpoint(
+            encoder=encoder, decoder=decoder, optimizer=optimizer
+        )
+        ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
 
     start_epoch = 0
     if ckpt_manager.latest_checkpoint:
         start_epoch = int(ckpt_manager.latest_checkpoint.split("-")[-1])
         # restoring the latest checkpoint in checkpoint_path
         ckpt.restore(ckpt_manager.latest_checkpoint)
+
+    print("Starting epoch at : {}".format(start_epoch))
 
     loss_plot = []
     EPOCHS = args["EPOCHS"]
@@ -252,8 +334,13 @@ if __name__ == "__main__":
         start = time.time()
         total_loss = 0
 
-        for (batch, (img_tensor, target)) in enumerate(dataset):
-            batch_loss, t_loss = train_step(
+        for batch, items in enumerate(distributed_dataset):
+
+            img_tensor = items[0]
+            target = items[1]
+
+            batch_loss, t_loss = distributed_train_step(
+                strategy,
                 img_tensor,
                 target,
                 encoder,
@@ -261,39 +348,43 @@ if __name__ == "__main__":
                 word_to_index,
                 optimizer,
                 loss_object,
+                BATCH_SIZE,
             )
-            total_loss += t_loss
+            total_loss += batch_loss
 
-            if batch % 100 == 0:
-                average_batch_loss = batch_loss.numpy() / int(target.shape[1])
-                print(f"Epoch {epoch+1} Batch {batch} Loss {average_batch_loss:.4f}")
+            average_batch_loss = batch_loss.numpy() / int(target.shape[1])
+            print(f"Epoch {epoch+1} Batch {batch} Loss {average_batch_loss:.4f}")
+
         # storing the epoch end loss value to plot later
         loss_plot.append(total_loss / num_steps)
 
         ckpt_manager.save()
-
+        time_end = time.time() - start
         print(f"Epoch {epoch+1} Loss {total_loss/num_steps:.6f}")
-        print(f"Time taken for 1 epoch {time.time()-start:.2f} sec\n")
+        print(f"Time taken for 1 epoch {time_end:.2f} sec\n")
 
-        run.log({"loss": total_loss / num_steps})
+        run.log(
+            {
+                "loss": total_loss / num_steps,
+                "time_taken_for_ONE_epoch": time_end,
+            }
+        )
 
     print("-------------Training finished------------")
-    # print("Saving loss plot ....")
-
-    # plt.plot(loss_plot)
-    # plt.xlabel("Epochs")
-    # plt.ylabel("Loss")
-    # plt.title("Loss Plot")
-    # plt.savefig("plots/loss_plot.png")
 
     # Evaluate results on validation set
     table = wandb.Table(
         columns=["Real Caption", "Generated caption", "BLEU Score (1-gram matching)"]
     )
 
+    val_dataset = tf.data.Dataset.from_tensor_slices((img_name_val, cap_val)).batch(
+        BATCH_SIZE
+    )
+
     num_perfect = 0
     for index in range(len(img_name_val)):
-        rid = np.random.randint(0, len(img_name_val))
+        # for image, caption in val_dataset:
+        rid = index
         image = img_name_val[rid]
         real_caption = " ".join(
             [
@@ -302,7 +393,8 @@ if __name__ == "__main__":
                 if i not in [0]
             ]
         )
-        result, attention_plot = evaluate(
+        result, attention_plot = distributed_test_step(
+            strategy,
             image,
             max_length,
             attention_features_shape,
@@ -320,14 +412,6 @@ if __name__ == "__main__":
             num_perfect += 1
         table.add_data(real_caption, " ".join(result), bleu_score)
 
-        # if index < 10:
-        #     plot_attention(
-        #         image,
-        #         real_caption,
-        #         result,
-        #         attention_plot,
-        #         "plots/example_runs_{}.png".format(index),
-        #     )
     run.log({"Perfect matched captions": num_perfect})
     run.log({"Validation set metrics": table})
     run.finish()
