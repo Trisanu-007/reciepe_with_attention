@@ -28,7 +28,7 @@ from utils.useful_functions import (
     train_step,
 )
 
-warnings.filterwarnings(action="once")
+warnings.filterwarnings("ignore")
 os.environ["TF_CUDNN_DETERMINISTIC"] = "1"
 random.seed(hash("setting random seeds") % 2**32 - 1)
 np.random.seed(hash("improves reproducibility") % 2**32 - 1)
@@ -122,6 +122,7 @@ if __name__ == "__main__":
 
     # Check if image_path_to_caption exists or initialize collecting
     if os.path.exists(PCK_SAVE_PATH + os.sep + "image_path_to_caption.pkl"):
+        print("Found local path to image_to_caption, loading it.")
         with open(PCK_SAVE_PATH + os.sep + "image_path_to_caption.pkl", "rb") as handle:
             image_path_to_caption = pkl.load(handle)
     else:
@@ -352,8 +353,9 @@ if __name__ == "__main__":
             )
             total_loss += batch_loss
 
-            average_batch_loss = batch_loss.numpy() / int(target.shape[1])
-            print(f"Epoch {epoch+1} Batch {batch} Loss {average_batch_loss:.4f}")
+            if batch % 100 == 0:
+                average_batch_loss = batch_loss.numpy() / int(target.shape[1])
+                print(f"Epoch {epoch+1} Batch {batch} Loss {average_batch_loss:.4f}")
 
         # storing the epoch end loss value to plot later
         loss_plot.append(total_loss / num_steps)
@@ -381,8 +383,10 @@ if __name__ == "__main__":
         BATCH_SIZE
     )
 
+    print("Calculating valuation metrics")
     num_perfect = 0
-    for index in range(len(img_name_val)):
+    running_sum = 0
+    for index in tqdm(range(len(img_name_val))):
         # for image, caption in val_dataset:
         rid = index
         image = img_name_val[rid]
@@ -410,8 +414,11 @@ if __name__ == "__main__":
         bleu_score = sentence_bleu(reference, candidate, weights=(1, 0, 0, 0))
         if bleu_score == 1:
             num_perfect += 1
+
+        running_sum += bleu_score
         table.add_data(real_caption, " ".join(result), bleu_score)
 
     run.log({"Perfect matched captions": num_perfect})
+    run.log({"Average of the score :" : running_sum / (len(img_name_val))})
     run.log({"Validation set metrics": table})
     run.finish()
