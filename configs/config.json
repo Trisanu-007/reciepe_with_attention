@@ -1,8 +1,9 @@
 {
-    "img_path": "/home/trisanu/needed_folders/Datasets/recipe-imgs-20k",
-    "csv_path": "/home/trisanu/needed_folders/Food Volume Experiments/complete.csv",
-    "json_path": "/home/trisanu/needed_folders/Food Volume Experiments/recipes_20k.json",
-    "pickle_save_path": "/home/trisanu/needed_folders/Food Volume Experiments/pickle_files",
+    "img_path": "F:\\Datasets\\recipe-imgs-20k",
+    "csv_path": "F:\\Deep Learning\\Food Volume Experiments\\complete.csv",
+    "json_path": "F:\\Deep Learning\\Food Volume Experiments\\recipes_20k.json",
+    "pickle_save_path": "F:\\Deep Learning\\Food Volume Experiments\\pickle_save_files",
+    "features_save_path": "F:\\Datasets\\features_save_path",
     "aug_img_path": "NA",
     "load_augs_from_path": false,
     "generate_features": false,

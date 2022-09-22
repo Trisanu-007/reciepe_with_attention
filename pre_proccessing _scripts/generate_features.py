@@ -1,4 +1,4 @@
-import os 
+import os
 import json
 import pickle as pkl
 import tensorflow as tf
@@ -8,7 +8,7 @@ import numpy as np
 from utils.useful_functions import load_image
 
 
-if __name__ == "__main__" :
+if __name__ == "__main__":
 
     with open("configs/config.json", "r") as f:
         args = json.load(f)
@@ -17,13 +17,13 @@ if __name__ == "__main__" :
     CSV_PATH = args["csv_path"]
     RECIPE_JSON_PATH = args["json_path"]
     PCK_SAVE_PATH = args["pickle_save_path"]
-
+    FEATURE_SAVE_PATH = args["features_save_path"]
 
     if os.path.exists(PCK_SAVE_PATH + os.sep + "image_path_to_caption.pkl"):
         print("Found local path to image_to_caption, loading it.")
         with open(PCK_SAVE_PATH + os.sep + "image_path_to_caption.pkl", "rb") as handle:
             image_path_to_caption = pkl.load(handle)
-    else : 
+    else:
         print("Please generate image_path_to_caption first.")
 
     image_model = tf.keras.applications.InceptionV3(
@@ -50,17 +50,19 @@ if __name__ == "__main__" :
 
     image_dataset = tf.data.Dataset.from_tensor_slices(encode_train)
     image_dataset = image_dataset.map(
-            load_image, num_parallel_calls=tf.data.AUTOTUNE
-        ).batch(64)
+        load_image, num_parallel_calls=tf.data.AUTOTUNE
+    ).batch(64)
 
     for img, path in tqdm(image_dataset):
         batch_features = image_features_extract_model(img)
         batch_features = tf.reshape(
-                batch_features, (batch_features.shape[0], -1, batch_features.shape[3])
-            )
+            batch_features, (batch_features.shape[0], -1, batch_features.shape[3])
+        )
 
         for bf, p in zip(batch_features, path):
             path_of_feature = p.numpy().decode("utf-8")
-            np.save(path_of_feature, bf.numpy())
+            name_of_img = path_of_feature.split(os.sep)[-1]
+            save_path = FEATURE_SAVE_PATH + os.sep + name_of_img
+            np.save(save_path, bf.numpy())
 
     print("Done !")

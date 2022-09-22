@@ -3,7 +3,9 @@ import json
 import os
 import pickle as pkl
 import random
+from re import A
 import time
+from unicodedata import name
 import warnings
 
 import matplotlib.pyplot as plt
@@ -107,6 +109,7 @@ if __name__ == "__main__":
     CSV_PATH = args["csv_path"]
     RECIPE_JSON_PATH = args["json_path"]
     PCK_SAVE_PATH = args["pickle_save_path"]
+    FEATURE_SAVE_PATH = args["features_save_path"]
 
     csv = pd.read_csv(CSV_PATH)
     all_recipe_ids = json.load(open(RECIPE_JSON_PATH, "r"))
@@ -196,7 +199,9 @@ if __name__ == "__main__":
 
             for bf, p in zip(batch_features, path):
                 path_of_feature = p.numpy().decode("utf-8")
-                np.save(path_of_feature, bf.numpy())
+                name_of_img = path_of_feature.split(os.sep)[-1]
+                save_path = FEATURE_SAVE_PATH + os.sep + name_of_img
+                np.save(save_path, bf.numpy())
 
     caption_dataset = tf.data.Dataset.from_tensor_slices(train_captions)
 
@@ -225,7 +230,8 @@ if __name__ == "__main__":
 
     img_to_cap_vector = collections.defaultdict(list)
     for img, cap in zip(img_name_vector, cap_vector):
-        img_to_cap_vector[img].append(cap)
+        save_path = FEATURE_SAVE_PATH + os.sep + img.split(os.sep)[-1]
+        img_to_cap_vector[save_path].append(cap)
 
     # Create training and validation sets using an 80-20 split randomly.
     img_keys = list(img_to_cap_vector.keys())
@@ -419,6 +425,6 @@ if __name__ == "__main__":
         table.add_data(real_caption, " ".join(result), bleu_score)
 
     run.log({"Perfect matched captions": num_perfect})
-    run.log({"Average of the score :" : running_sum / (len(img_name_val))})
+    run.log({"Average of the score :": running_sum / (len(img_name_val))})
     run.log({"Validation set metrics": table})
     run.finish()
