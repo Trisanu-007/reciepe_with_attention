@@ -7,6 +7,7 @@ from re import A
 import time
 from unicodedata import name
 import warnings
+from PIL import Image
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -102,7 +103,10 @@ def distributed_test_step(
 
 if __name__ == "__main__":
 
-    with open("configs/config.json", "r") as f:
+    with open(
+        "F:\\Deep Learning\\Food Volume Experiments\\food_ingredient_script\\configs\\config.json",
+        "r",
+    ) as f:
         args = json.load(f)
 
     IMG_PATH = args["img_path"]
@@ -230,8 +234,9 @@ if __name__ == "__main__":
 
     img_to_cap_vector = collections.defaultdict(list)
     for img, cap in zip(img_name_vector, cap_vector):
-        save_path = FEATURE_SAVE_PATH + os.sep + img.split(os.sep)[-1]
-        img_to_cap_vector[save_path].append(cap)
+        # save_path = FEATURE_SAVE_PATH + os.sep + img.split(os.sep)[-1]
+        # img_to_cap_vector[save_path].append(cap)
+        img_to_cap_vector[img].append(cap)
 
     # Create training and validation sets using an 80-20 split randomly.
     img_keys = list(img_to_cap_vector.keys())

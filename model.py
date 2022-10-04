@@ -40,9 +40,20 @@ class CNN_Encoder(tf.keras.Model):
     def __init__(self, embedding_dim):
         super(CNN_Encoder, self).__init__()
         # shape after fc == (batch_size, 64, embedding_dim)
+        image_model = tf.keras.applications.InceptionV3(
+            include_top=False, weights="imagenet"
+        )
+        new_input = image_model.input
+        hidden_layer = image_model.layers[-1].output
+        self.image_features_extract_model = tf.keras.Model(new_input, hidden_layer)
         self.fc = tf.keras.layers.Dense(embedding_dim)
 
-    def call(self, x):
+    def call(self, img):
+        batch_features = self.image_features_extract_model(img)
+        batch_features = tf.reshape(
+            batch_features, (batch_features.shape[0], -1, batch_features.shape[3])
+        )
+        x = batch_features
         x = self.fc(x)
         x = tf.nn.relu(x)
         return x

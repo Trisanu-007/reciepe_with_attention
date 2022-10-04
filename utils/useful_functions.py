@@ -1,7 +1,9 @@
+from tkinter import image_names
 import tensorflow as tf
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
+import torch
 
 
 def load_image(image_path):
@@ -21,7 +23,11 @@ def standardize(inputs):
 
 # Load the numpy files
 def map_func(img_name, cap):
-    img_tensor = np.load(img_name.decode("utf-8") + ".npy")
+    img_file = img_name + ".pt"
+    img_arr = torch.load(img_file)
+    img = Image.fromarray(img_arr)
+    img = img.resize((256, 256))
+    img_tensor = np.asarray(img, dtype=np.float32)
     return img_tensor, cap
 
 
