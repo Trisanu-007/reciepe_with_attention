@@ -23,9 +23,14 @@ def standardize(inputs):
 
 # Load the numpy files
 def map_func(img_name, cap):
-    img_file = img_name + ".pt"
-    img_arr = torch.load(img_file)
-    img = Image.fromarray(img_arr)
+    img_name = img_name.decode("utf=8")
+    img_file = img_name
+    end = img_file.split(".")[-1]
+    if end == "pt":
+        img = torch.load(img_file)
+        img = Image.fromarray(img)
+    else:
+        img = Image.open(img_file)
     img = img.resize((256, 256))
     img_tensor = np.asarray(img, dtype=np.float32)
     return img_tensor, cap
