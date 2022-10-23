@@ -108,11 +108,10 @@ def evaluate(
     hidden = decoder.reset_state(batch_size=1)
 
     temp_input = tf.expand_dims(load_image(image)[0], 0)
-    img_tensor_val = image_features_extract_model(temp_input)
-    img_tensor_val = tf.reshape(
-        img_tensor_val, (img_tensor_val.shape[0], -1, img_tensor_val.shape[3])
-    )
-
+    img_tensor_val = temp_input  # image_features_extract_model(temp_input)
+    # img_tensor_val = tf.reshape(
+    #     img_tensor_val, (img_tensor_val.shape[0], -1, img_tensor_val.shape[3])
+    # )
     features = encoder(img_tensor_val)
 
     dec_input = tf.expand_dims([word_to_index("<start>")], 0)
